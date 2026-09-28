@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ДЗ 9-4</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f1f3f6);
+    --text: var(--tg-theme-text-color, #16181d);
+    --hint: var(--tg-theme-hint-color, #8a8f98);
+    --accent: var(--tg-theme-button-color, #2f7de1);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --line: color-mix(in srgb, var(--hint) 25%, transparent);
+    --sans: "Onest", -apple-system, "Segoe UI", Roboto, sans-serif;
+    --display: "Unbounded", "Onest", -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased;
+    padding: 20px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; gap: 22px; user-select: none;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* быстрые кнопки */
+  .quick { display: flex; gap: 8px; }
+  .quick button {
+    flex: 1; padding: 10px 6px; border-radius: 12px; background: var(--bg2);
+    font-weight: 500; font-size: 15px; transition: background .15s, color .15s;
+  }
+  .quick button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+
+  /* большая дата — главный элемент */
+  .page {
+    position: relative; padding: 18px 20px 20px; border-radius: 20px; background: var(--bg2);
+    overflow: hidden;
+  }
+  .page::before { /* поля тетради */
+    content: ""; position: absolute; top: 0; bottom: 0; left: 64px; width: 1.5px;
+    background: color-mix(in srgb, #e5484d 55%, transparent);
+  }
+  .page::after { /* клетка */
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .page > * { position: relative; z-index: 1; }
+  .day {
+    font-family: var(--display); font-weight: 700; font-size: 104px; line-height: .95;
+    letter-spacing: -0.04em; padding-left: 56px;
+  }
+  .day.pop { animation: pop .22s ease-out; }
+  @keyframes pop { from { transform: translateY(6px); opacity: .3; } to { transform: none; opacity: 1; } }
+  .month { font-size: 22px; font-weight: 600; padding-left: 60px; margin-top: 6px; }
+  .weekday { color: var(--hint); padding-left: 60px; }
+
+  /* неделя */
+  .week-head { display: flex; align-items: center; justify-content: space-between; }
+  .week-head span { font-weight: 600; }
+  .week-head button { width: 40px; height: 40px; border-radius: 50%; font-size: 20px; color: var(--accent); }
+  .week-head button:disabled { color: var(--hint); opacity: .4; cursor: default; }
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
+  .cell {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 8px 0 10px; border-radius: 14px; transition: background .15s, color .15s;
+  }
+  .cell small { font-size: 12px; color: var(--hint); }
+  .cell b { font-size: 18px; font-weight: 600; }
+  .cell.today b { color: var(--accent); }
+  .cell.off { opacity: .4; }
+  .cell[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+  .cell[aria-pressed="true"] small, .cell[aria-pressed="true"] b { color: var(--accent-text); }
+
+  .note { color: var(--hint); font-size: 14px; text-align: center; margin-top: auto; }
+  .fallback {
+    display: none; padding: 14px; border-radius: 14px; background: var(--accent);
+    color: var(--accent-text); font-weight: 600; font-size: 16px;
+  }
+  body.no-tg .fallback { display: block; }
+
+  @media (prefers-reduced-motion: reduce) { .day.pop { animation: none; } * { transition: none !important; } }
+  @media (max-width: 340px) { .day { font-size: 84px; } }
+</style>
+</head>
+<body>
+  <div class="quick" role="group" aria-label="Быстрый выбор">
+    <button data-shift="0">Сегодня</button>
+    <button data-shift="1">Завтра</button>
+    <button data-shift="2">Послезавтра</button>
+  </div>
+
+  <section class="page" aria-live="polite">
+    <div class="day" id="day">30</div>
+    <div class="month" id="month">сентября</div>
+    <div class="weekday" id="weekday">среда</div>
+  </section>
+
+  <section>
+    <div class="week-head">
+      <button id="prev" aria-label="Прошлая неделя">‹</button>
+      <span id="range"></span>
+      <button id="next" aria-label="Следующая неделя">›</button>
+    </div>
+    <div class="week" id="week"></div>
+  </section>
+
+  <button class="fallback" id="fallback">Показать ДЗ</button>
+  <p class="note" id="note">ДЗ для 9-4 придёт в чат с ботом</p>
+
+<script>
+  const tg = window.Telegram && Telegram.WebApp;
+  const inTelegram = !!(tg && tg.initData);
+  if (tg) { tg.ready(); tg.expand(); }
+  if (!inTelegram) {
+    document.body.classList.add("no-tg");
+    document.getElementById("note").textContent = "Открой эту страницу через кнопку в боте";
+  }
+
+  const MONTHS = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  const DAYS = ["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
+  const SHORT = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const monday = d => addDays(d, -((d.getDay() + 6) % 7));
+  const same = (a, b) => a.getTime() === b.getTime();
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+  const today = startOfDay(new Date());
+  let selected = addDays(today, 1);           // по умолчанию — завтра
+  if (selected.getDay() === 0) selected = addDays(selected, 1);  // воскресенье → понедельник
+  let weekStart = monday(selected);
+  const minWeek = addDays(monday(today), -7);  // можно заглянуть на неделю назад
+
+  const el = id => document.getElementById(id);
+
+  function render(animate) {
+    el("day").textContent = selected.getDate();
+    el("month").textContent = MONTHS[selected.getMonth()];
+    el("weekday").textContent = DAYS[selected.getDay()];
+    if (animate) { const d = el("day"); d.classList.remove("pop"); void d.offsetWidth; d.classList.add("pop"); }
+
+    const end = addDays(weekStart, 6);
+    el("range").textContent = weekStart.getMonth() === end.getMonth()
+      ? `${weekStart.getDate()}–${end.getDate()} ${MONTHS[end.getMonth()]}`
+      : `${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]}`;
+    el("prev").disabled = weekStart <= minWeek;
+
+    const week = el("week");
+    week.innerHTML = "";
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      const b = document.createElement("button");
+      b.className = "cell" + (same(d, today) ? " today" : "") + (i === 6 ? " off" : "");
+      b.setAttribute("aria-pressed", same(d, selected));
+      b.setAttribute("aria-label", `${d.getDate()} ${MONTHS[d.getMonth()]}, ${DAYS[d.getDay()]}`);
+      b.innerHTML = `<small>${SHORT[i]}</small><b>${d.getDate()}</b>`;
+      b.onclick = () => pick(d);
+      week.appendChild(b);
+    }
+
+    document.querySelectorAll(".quick button").forEach(b => {
+      b.setAttribute("aria-pressed", same(addDays(today, +b.dataset.shift), selected));
+    });
+
+    const label = `Показать ДЗ на ${selected.getDate()} ${MONTHS[selected.getMonth()]}`;
+    el("fallback").textContent = label;
+    if (inTelegram) { tg.MainButton.setText(label); tg.MainButton.show(); }
+  }
+
+  function pick(d) {
+    if (same(d, selected)) return;
+    selected = d;
+    weekStart = monday(d);
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+    render(true);
+  }
+
+  function send() {
+    const payload = JSON.stringify({ date: iso(selected) });
+    if (inTelegram) {
+      tg.HapticFeedback && tg.HapticFeedback.impactOccurred("light");
+      tg.sendData(payload);       // бот получит дату, мини-апп закроется
+    } else {
+      alert("Это работает только внутри Telegram");
+    }
+  }
+
+  document.querySelectorAll(".quick button").forEach(b => b.onclick = () => pick(addDays(today, +b.dataset.shift)));
+  el("prev").onclick = () => { weekStart = addDays(weekStart, -7); render(); };
+  el("next").onclick = () => { weekStart = addDays(weekStart, 7); render(); };
+  el("fallback").onclick = send;
+  if (inTelegram) tg.MainButton.onClick(send);
+
+  render();
+</script>
+</body>
+</html>
